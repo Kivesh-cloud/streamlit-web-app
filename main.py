@@ -2,8 +2,18 @@ import streamlit as st
 import pandas as pd
 import joblib
 
-# Load the saved machine learning model
-model = joblib.load('C:/Users/kives/OneDrive/Desktop/Honors/ITDAA/Project1/heart_disease_prediction_model.pkl')
+def download_model_from_url(url):
+    response = requests.get(url)
+    model_bytes = BytesIO(response.content)
+    return joblib.load(model_bytes)
+
+# URL where the model is hosted
+model_url = 'https://1drv.ms/u/s!AnoSK-UPXGfigvUEgHUqMjaFNUMjfg?e=aVTDNx'
+
+# Download the model
+st.write('Downloading model from remote location...')
+model = download_model_from_url(model_url)
+st.write('Model downloaded successfully.')
 
 
 # Function to predict heart disease
