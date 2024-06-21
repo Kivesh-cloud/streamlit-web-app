@@ -1,59 +1,94 @@
 import streamlit as st
-import pandas as pd
 import joblib
+import numpy as np
 
-def download_model_from_url(url):
-    response = requests.get(url)
-    model_bytes = BytesIO(response.content)
-    return joblib.load(model_bytes)
+def load_model(model_path):
+    try:
+        model = joblib.load(model_path)
+        st.success("Model loaded successfully!")
+        return model
+    except Exception as e:
+        st.error(f"Failed to load model: {e}")
+        return None
 
-# URL where the model is hosted
-model_url = 'https://1drv.ms/u/s!AnoSK-UPXGfigvUEgHUqMjaFNUMjfg?e=aVTDNx'
-
-# Download the model
-st.write('Downloading model from remote location...')
-model = download_model_from_url(model_url)
-st.write('Model downloaded successfully.')
-
-
-# Function to predict heart disease
-def predict_heart_disease(age, sex, cp, trestbps, chol, fbs, restecg, thalach, exang, oldpeak, slope, ca, thal):
-    input_data = pd.DataFrame({
-        'age': [age], 'sex': [sex], 'cp': [cp], 'trestbps': [trestbps], 'chol': [chol],
-        'fbs': [fbs], 'restecg': [restecg], 'thalach': [thalach], 'exang': [exang],
-        'oldpeak': [oldpeak], 'slope': [slope], 'ca': [ca], 'thal': [thal]
-    })
-    prediction = model.predict(input_data)
-    return prediction[0]
+model_path = 'heart_disease_prediction_model.pkl' 
+scaler_path = 'scaler.pkl'  
+model = load_model(model_path)
+scaler = joblib.load(scaler_path)
 
 
+def preprocess_input(age, sex, cp, trestbps, chol, fbs, restecg, thalach, exang, oldpeak, slope, ca, thal):
 
-# Application title and description
+    cp_mapping = {'Typical Angina': 0, 'Atypical Angina': 1, 'Non-anginal Pain': 2, 'Asymptomatic': 3}
+    restecg_mapping = {'Normal': 0, 'ST-T Wave Abnormality': 1, 'Left Ventricular Hypertrophy': 2}
+    slope_mapping = {'Upsloping': 0, 'Flat': 1, 'Downsloping': 2}
+    thal_mapping = {'Normal': 0, 'Fixed Defect': 1, 'Reversible Defect': 2}
+
+
+    sex = 1 if sex == 'Male' else 0
+    fbs = 1 if fbs == 'Yes' else 0
+    exang = 1 if exang == 'Yes' else 0
+
+
+    input_data = np.array([[
+        age, sex, cp_mapping[cp], trestbps, chol, fbs, restecg_mapping[restecg], thalach, exang,
+        oldpeak, slope_mapping[slope], int(ca), thal_mapping[thal]
+    ]])
+
+
+    input_data_scaled = scaler.transform(input_data)
+
+
+    if input_data_scaled.shape[1] < 30:
+        input_data_scaled = np.pad(input_data_scaled, ((0, 0), (0, 30 - input_data_scaled.shape[1])), 'constant')
+
+    return input_data_scaled
+
+
+def predict_heart_disease(input_data):
+    try:
+        if model:
+            # Predict the target
+            prediction = model.predict(input_data)
+            return prediction[0]
+        else:
+            st.error("Model not loaded. Cannot make predictions.")
+            return None
+    except Exception as e:
+        st.error(f"Prediction error: {e}")
+        return None
+
+
 st.title('Heart Disease Prediction')
-st.write('Enter patient details to predict the likelihood of heart disease.')
+st.markdown('Fill in the details below to predict whether a patient likely suffers from heart disease.')
 
-# Sidebar with input fields
-st.sidebar.title('Patient Details')
-age = st.sidebar.number_input('Age', min_value=1, max_value=100)
-sex = st.sidebar.selectbox('Sex', ['0', '1'])  # Assuming '0' for female, '1' for male
-cp = st.sidebar.selectbox('Chest Pain Type', ['0', '1', '2', '3'])
-trestbps = st.sidebar.number_input('Resting Blood Pressure (mm Hg)', min_value=0, max_value=300)
-chol = st.sidebar.number_input('Cholesterol (mg/dL)', min_value=0, max_value=600)
-fbs = st.sidebar.selectbox('Fasting Blood Sugar > 120 mg/dl', ['0', '1'])
-restecg = st.sidebar.selectbox('Resting Electrocardiographic Results', ['0', '1', '2'])
-thalach = st.sidebar.number_input('Maximum Heart Rate Achieved', min_value=0, max_value=300)
-exang = st.sidebar.selectbox('Exercise Induced Angina', ['0', '1'])
-oldpeak = st.sidebar.number_input('ST Depression Induced by Exercise', min_value=0.0, max_value=10.0)
-slope = st.sidebar.selectbox('Slope of the Peak Exercise ST Segment', ['0', '1', '2'])
-ca = st.sidebar.selectbox('Number of Major Vessels Colored by Flouroscopy', ['0', '1', '2', '3'])
-thal = st.sidebar.selectbox('Thalassemia', ['0', '1', '2', '3'])
 
-# Predict button
-if st.sidebar.button('Predict'):
-    prediction = predict_heart_disease(age, sex, cp, trestbps, chol, fbs, restecg, thalach, exang, oldpeak, slope, ca,
-                                       thal)
-    st.write('## Prediction:')
-    if prediction == 1:
-        st.write('The patient is likely to have heart disease.')
+age = st.slider('Age', 20, 100, 50)
+sex = st.radio('Sex', ['Male', 'Female'])
+cp = st.selectbox('Chest Pain Type', ['Typical Angina', 'Atypical Angina', 'Non-anginal Pain', 'Asymptomatic'])
+trestbps = st.slider('Resting Blood Pressure (mm Hg)', 90, 200, 120)
+chol = st.slider('Cholesterol (mg/dl)', 100, 600, 200)
+fbs = st.radio('Fasting Blood Sugar > 120 mg/dl', ['Yes', 'No'])
+restecg = st.selectbox('Resting Electrocardiographic Results', ['Normal', 'ST-T Wave Abnormality', 'Left Ventricular Hypertrophy'])
+thalach = st.slider('Maximum Heart Rate Achieved', 60, 220, 150)
+exang = st.radio('Exercise Induced Angina', ['Yes', 'No'])
+oldpeak = st.slider('ST Depression Induced by Exercise Relative to Rest', 0.0, 6.2, 0.0)
+slope = st.selectbox('Slope of the Peak Exercise ST Segment', ['Upsloping', 'Flat', 'Downsloping'])
+ca = st.selectbox('Number of Major Vessels Colored by Flouroscopy', ['0', '1', '2', '3'])
+thal = st.selectbox('Thalassemia', ['Normal', 'Fixed Defect', 'Reversible Defect'])
+
+
+if st.button('Predict'):
+    input_data = preprocess_input(age, sex, cp, trestbps, chol, fbs, restecg, thalach, exang, oldpeak, slope, ca, thal)
+    
+    if input_data.shape[1] == 30:  
+        prediction = predict_heart_disease(input_data)
+        
+        if prediction is not None:
+            # Display prediction
+            if prediction == 0:
+                st.error('The patient is predicted to NOT have heart disease.')
+            else:
+                st.success('The patient is predicted to HAVE heart disease.')
     else:
-        st.write('The patient is not likely to have heart disease.')
+        st.error(f"Input data shape {input_data.shape} does not match model's expected shape (1, 30).")
